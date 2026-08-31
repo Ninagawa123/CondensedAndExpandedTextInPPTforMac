@@ -68,15 +68,21 @@
   <textarea id="text" placeholder="テキストを入力（改行可）">源ノ角ゴシック</textarea>
 
   <div class="row">
-    <button id="copyBtn">SVGをコピー（⌘V で PPT へ）</button>
-    <button id="downloadBtn" class="secondary">SVGをダウンロード（ドラッグ用）</button>
+    <button id="downloadBtn">SVGをダウンロード → PPTへドラッグ（推奨）</button>
+    <button id="copyBtn" class="secondary">SVGをコピー（実験的）</button>
     <span id="status"></span>
   </div>
 
   <div id="preview"></div>
 
   <small>
-    <b>使い方:</b> テキスト入力 → コピー or ダウンロード → PowerPoint に貼付/挿入 → 右クリック <b>「シェイプに変換」</b> → 縦横を非比例スケール = <b>長体/平体</b>
+    <b>使い方（推奨フロー）:</b><br>
+    1. テキスト入力 → <b>「SVGをダウンロード」</b><br>
+    2. ダウンロードした <code>.svg</code> を PowerPoint スライドに<b>ドラッグ&ドロップ</b>（または「挿入 &gt; 画像 &gt; このデバイス」から選択）<br>
+    3. 挿入されたSVGを右クリック → <b>「シェイプに変換」</b><br>
+    4. シェイプの縦横を<b>非比例スケール</b> = 長体/平体<br>
+    <br>
+    ※ PowerPoint for Mac は<b>クリップボード経由のSVG貼付に非対応</b>のため「ダウンロード」を推奨。Windows PPTなら「コピー」で ⌘V/Ctrl+V 貼付も可。
   </small>
 </div>
 
@@ -259,17 +265,30 @@
   async function copySVG() {
     const svg = getCurrentSVG();
     if (!svg) { setStatus('SVG未生成', 'warn'); return; }
-    try {
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      await navigator.clipboard.write([new ClipboardItem({ 'image/svg+xml': blob })]);
-      setStatus('コピー完了 → PowerPointで ⌘V', 'ok');
-    } catch (e) {
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
+    const b64 = btoa(unescape(encodeURIComponent(svg)));
+    const htmlWrap = `<img src="data:image/svg+xml;base64,${b64}">`;
+    const htmlBlob = new Blob([htmlWrap], { type: 'text/html' });
+    const textBlob = new Blob([svg], { type: 'text/plain' });
+    // Try richest set first, then fall back
+    const attempts = [
+      { 'image/svg+xml': svgBlob, 'text/html': htmlBlob, 'text/plain': textBlob },
+      { 'text/html': htmlBlob, 'text/plain': textBlob },
+      { 'image/svg+xml': svgBlob },
+    ];
+    for (const rec of attempts) {
       try {
-        await navigator.clipboard.writeText(svg);
-        setStatus('SVGテキストとしてコピー（PPTで貼付不可ならダウンロード使用）', 'warn');
-      } catch (e2) {
-        setStatus('コピー失敗: ' + e.message, 'warn');
-      }
+        await navigator.clipboard.write([new ClipboardItem(rec)]);
+        const fmt = Object.keys(rec).join(', ');
+        setStatus(`コピー完了 (${fmt}) → PPT Macで貼付不可の場合は「ダウンロード」を推奨`, 'ok');
+        return;
+      } catch (e) { /* try next */ }
+    }
+    try {
+      await navigator.clipboard.writeText(svg);
+      setStatus('SVGテキストのみコピー（PPTには貼付不可・ダウンロード推奨）', 'warn');
+    } catch (e) {
+      setStatus('コピー失敗: ' + e.message, 'warn');
     }
   }
 

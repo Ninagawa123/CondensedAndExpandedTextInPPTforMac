@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>長体・平体 PPT for Mac — 源ノフォント SVG化ツール</title>
+<meta name="description" content="源ノ角ゴシック/源ノ明朝のテキストをSVGパスに変換してPowerPoint for Macで長体・平体を実現するツール">
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+         max-width: 960px; margin: 24px auto; padding: 0 20px; color: #222; line-height: 1.5; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 20px; }
+  .card { border: 1px solid #ddd; padding: 16px; border-radius: 10px; margin: 16px 0; background: #fff; }
+  h2 { font-size: 14px; margin: 0 0 10px; color: #555; font-weight: 600; }
+  .row { display: flex; gap: 12px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  label { font-size: 13px; color: #555; display: inline-flex; gap: 6px; align-items: center; }
+  select, input[type="number"], input[type="file"], textarea, button {
+    font: inherit; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+  }
+  input[type="number"] { width: 80px; }
+  button { background: #007aff; color: #fff; border: none; cursor: pointer; font-weight: 500; }
+  button:hover { background: #0062cc; }
+  button:disabled { background: #ccc; cursor: not-allowed; }
+  button.secondary { background: #eee; color: #333; }
+  button.secondary:hover { background: #ddd; }
+  textarea { width: 100%; min-height: 80px; box-sizing: border-box; resize: vertical; font-size: 16px; }
+  #preview { border: 1px dashed #ccc; padding: 16px; background: #fafafa;
+             min-height: 120px; overflow: auto; display: flex; align-items: center; justify-content: center; }
+  #preview svg { max-width: 100%; height: auto; max-height: 320px; }
+  #status { font-size: 13px; }
+  .warn { color: #b00; }
+  .ok { color: #060; }
+  .info { color: #06c; }
+  small { color: #888; font-size: 12px; display: block; margin-top: 8px; line-height: 1.6; }
+  code, kbd { background: #f5f5f5; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: "SF Mono", Menlo, monospace; }
+  details { margin: 12px 0; }
+  summary { cursor: pointer; color: #555; font-size: 13px; }
+  details[open] summary { margin-bottom: 8px; }
+  .hint { font-size: 12px; color: #999; }
+  a { color: #007aff; }
+</style>
+</head>
+<body>
+
+<h1>長体・平体 PPT for Mac</h1>
+<div class="sub">源ノ角ゴシック / 源ノ明朝 をアウトライン化して PowerPoint for Mac で自由に変形</div>
+
+<div class="card">
+  <div class="row">
+    <label>ファミリー
+      <select id="family">
+        <option value="Sans">源ノ角ゴシック (Sans)</option>
+        <option value="Serif">源ノ明朝 (Serif)</option>
+      </select>
+    </label>
+    <label>ウェイト
+      <select id="weight"></select>
+    </label>
+    <label>サイズ
+      <input type="number" id="fontSize" value="200" min="10" max="2000" step="10">
+    </label>
+    <label>行送り
+      <input type="number" id="lineHeight" value="1.2" min="0.5" max="3" step="0.1">
+    </label>
+  </div>
+
+  <textarea id="text" placeholder="テキストを入力（改行可）">源ノ角ゴシック</textarea>
+
+  <div class="row">
+    <button id="copyBtn">SVGをコピー（⌘V で PPT へ）</button>
+    <button id="downloadBtn" class="secondary">SVGをダウンロード（ドラッグ用）</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="preview"></div>
+
+  <small>
+    <b>使い方:</b> テキスト入力 → コピー or ダウンロード → PowerPoint に貼付/挿入 → 右クリック <b>「シェイプに変換」</b> → 縦横を非比例スケール = <b>長体/平体</b>
+  </small>
+</div>
+
+<details>
+  <summary>詳細オプション（フォント管理）</summary>
+  <div style="padding: 8px 0; font-size: 13px;">
+    <p><b>Regular / Bold</b> はサイト同梱、他のウェイト（ExtraLight/Light/Normal/Medium/SemiBold/Heavy）は
+    <a href="https://www.jsdelivr.com/" target="_blank">jsDelivr CDN</a> から
+    <a href="https://github.com/adobe-fonts" target="_blank">Adobe公式リポジトリ</a>を経由して初回選択時に取得します。
+    取得済みフォントは IndexedDB に保存され、次回以降オフラインで即座に使用可能です。</p>
+    <div class="row">
+      <button class="secondary" id="prefetchAllBtn">全ウェイト一括プリフェッチ</button>
+      <button class="secondary" id="resetFontsBtn">キャッシュを削除</button>
+      <span id="cacheStatus" class="hint"></span>
+    </div>
+    <p style="margin-top:12px;">ローカルOTFで上書きしたい場合はここから追加できます:</p>
+    <input type="file" id="fontFiles" accept=".otf" multiple>
+    <span id="setupStatus" class="hint"></span>
+  </div>
+</details>
+
+<div class="sub" style="margin-top:24px;">
+  <a href="https://github.com/Ninagawa123/CondensedAndExpandedTextInPPTforMac">GitHub</a> ·
+  コード: MIT ·
+  フォント: <a href="https://github.com/adobe-fonts/source-han-sans">Source Han Sans</a> /
+  <a href="https://github.com/adobe-fonts/source-han-serif">Source Han Serif</a> (SIL OFL)
+</div>
+
+<script src="https://unpkg.com/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<script>
+(() => {
+  const WEIGHTS = {
+    Sans:  ['ExtraLight','Light','Normal','Regular','Medium','Bold','Heavy'],
+    Serif: ['ExtraLight','Light','Regular','Medium','SemiBold','Bold','Heavy']
+  };
+  const BUNDLED = new Set(['Sans/Regular','Sans/Bold','Serif/Regular','Serif/Bold']);
+  const DB_NAME = 'shFontsDB', STORE = 'fonts';
+  const $ = id => document.getElementById(id);
+  const fontCache = new Map();
+
+  // ---------- IndexedDB ----------
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function idb(mode, fn) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, mode);
+      const result = fn(tx.objectStore(STORE));
+      tx.oncomplete = () => resolve(result?.result);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  const idbGet   = k => idb('readonly',  s => s.get(k));
+  const idbPut   = (k,v) => idb('readwrite', s => s.put(v, k));
+  const idbKeys  = ()  => idb('readonly',  s => s.getAllKeys());
+  const idbClear = ()  => idb('readwrite', s => s.clear());
+
+  // ---------- Font URL resolver ----------
+  function fontUrl(family, weight) {
+    const key = `${family}/${weight}`;
+    if (BUNDLED.has(key)) {
+      return `./fonts/SourceHan${family}-${weight}.otf`;
+    }
+    const repo = family === 'Sans' ? 'source-han-sans' : 'source-han-serif';
+    return `https://cdn.jsdelivr.net/gh/adobe-fonts/${repo}@release/OTF/Japanese/SourceHan${family}-${weight}.otf`;
+  }
+
+  async function fetchWithProgress(url, label) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${label} 取得失敗 (HTTP ${res.status})`);
+    const total = parseInt(res.headers.get('content-length') || '0', 10);
+    if (!total || !res.body) return await res.arrayBuffer();
+    const reader = res.body.getReader();
+    const chunks = []; let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); received += value.length;
+      const pct = Math.round(received / total * 100);
+      setStatus(`${label} 取得中... ${pct}%`, 'info');
+    }
+    const buf = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) { buf.set(c, offset); offset += c.length; }
+    return buf.buffer;
+  }
+
+  async function loadFont(family, weight) {
+    const key = `${family}/${weight}`;
+    if (fontCache.has(key)) return fontCache.get(key);
+    let buf = await idbGet(key);
+    if (!buf) {
+      const url = fontUrl(family, weight);
+      const label = `${family} ${weight}`;
+      setStatus(`${label} 取得中...`, 'info');
+      buf = await fetchWithProgress(url, label);
+      await idbPut(key, buf);
+      setStatus(`${label} 準備完了`, 'ok');
+    }
+    const font = opentype.parse(buf);
+    fontCache.set(key, font);
+    return font;
+  }
+
+  // ---------- SVG generation ----------
+  function textToSVG(font, text, fontSize, lineHeightMul) {
+    const lines = text.split(/\r?\n/);
+    const emScale = fontSize / font.unitsPerEm;
+    const ascender = font.ascender * emScale;
+    const lineH = (font.ascender - font.descender) * emScale * lineHeightMul;
+
+    const combined = new opentype.Path();
+    lines.forEach((line, i) => {
+      if (!line) return;
+      const y = ascender + i * lineH;
+      combined.extend(font.getPath(line, 0, y, fontSize));
+    });
+
+    if (!combined.commands.length) return null;
+    const b = combined.getBoundingBox();
+    const w = b.x2 - b.x1, h = b.y2 - b.y1;
+    const d = combined.toPathData(3);
+    const vb = `${b.x1.toFixed(3)} ${b.y1.toFixed(3)} ${w.toFixed(3)} ${h.toFixed(3)}`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${w.toFixed(3)}" height="${h.toFixed(3)}"><path d="${d}" fill="#000"/></svg>`;
+  }
+
+  // ---------- UI helpers ----------
+  function updateWeightOptions() {
+    const fam = $('family').value;
+    const list = WEIGHTS[fam];
+    const sel = $('weight');
+    const prev = sel.value;
+    sel.innerHTML = '';
+    list.forEach(w => {
+      const o = document.createElement('option');
+      o.value = w; o.textContent = w + (BUNDLED.has(`${fam}/${w}`) ? '' : ' ⬇');
+      sel.appendChild(o);
+    });
+    sel.value = list.includes(prev) ? prev : 'Regular';
+  }
+
+  function setStatus(msg, cls) {
+    const s = $('status');
+    s.textContent = msg;
+    s.className = cls || '';
+  }
+
+  let pending;
+  async function updatePreview() {
+    clearTimeout(pending);
+    pending = setTimeout(async () => {
+      const family = $('family').value;
+      const weight = $('weight').value;
+      const text = $('text').value;
+      const fs = parseFloat($('fontSize').value) || 200;
+      const lh = parseFloat($('lineHeight').value) || 1.2;
+      try {
+        const font = await loadFont(family, weight);
+        const svg = textToSVG(font, text, fs, lh);
+        $('preview').innerHTML = svg || '<em style="color:#999;">（テキスト未入力）</em>';
+        if (!$('status').classList.contains('info')) setStatus('', '');
+      } catch (e) {
+        $('preview').innerHTML = '';
+        setStatus(e.message, 'warn');
+      }
+    }, 80);
+  }
+
+  function getCurrentSVG() {
+    const el = $('preview').querySelector('svg');
+    return el ? el.outerHTML : null;
+  }
+
+  async function copySVG() {
+    const svg = getCurrentSVG();
+    if (!svg) { setStatus('SVG未生成', 'warn'); return; }
+    try {
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/svg+xml': blob })]);
+      setStatus('コピー完了 → PowerPointで ⌘V', 'ok');
+    } catch (e) {
+      try {
+        await navigator.clipboard.writeText(svg);
+        setStatus('SVGテキストとしてコピー（PPTで貼付不可ならダウンロード使用）', 'warn');
+      } catch (e2) {
+        setStatus('コピー失敗: ' + e.message, 'warn');
+      }
+    }
+  }
+
+  function downloadSVG() {
+    const svg = getCurrentSVG();
+    if (!svg) { setStatus('SVG未生成', 'warn'); return; }
+    const family = $('family').value, weight = $('weight').value;
+    const stem = ($('text').value.slice(0, 20).replace(/[\/\\?%*:|"<>\n\r]/g, '_')) || 'text';
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${stem}_${family}-${weight}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setStatus('ダウンロード完了 → .svg を PPT スライドへドラッグ', 'ok');
+  }
+
+  async function prefetchAll() {
+    const btn = $('prefetchAllBtn');
+    btn.disabled = true;
+    let done = 0, total = 0;
+    for (const fam of Object.keys(WEIGHTS)) total += WEIGHTS[fam].length;
+    for (const fam of Object.keys(WEIGHTS)) {
+      for (const w of WEIGHTS[fam]) {
+        try {
+          await loadFont(fam, w);
+          done++;
+          $('cacheStatus').textContent = `プリフェッチ ${done}/${total}`;
+        } catch (e) {
+          console.error(`${fam}/${w}`, e);
+        }
+      }
+    }
+    btn.disabled = false;
+    await refreshCacheStatus();
+    setStatus('全ウェイトのキャッシュ完了', 'ok');
+  }
+
+  async function refreshCacheStatus() {
+    const keys = await idbKeys();
+    $('cacheStatus').textContent = `キャッシュ: ${keys.length} ウェイト`;
+  }
+
+  async function handleFontFiles(files) {
+    let added = 0, skipped = 0;
+    for (const f of files) {
+      const m = f.name.match(/^SourceHan(Sans|Serif)-([A-Za-z]+)\.otf$/i);
+      if (!m) { skipped++; continue; }
+      const family = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+      const weight = m[2];
+      if (!WEIGHTS[family] || !WEIGHTS[family].includes(weight)) { skipped++; continue; }
+      const buf = await f.arrayBuffer();
+      await idbPut(`${family}/${weight}`, buf);
+      fontCache.delete(`${family}/${weight}`);
+      added++;
+    }
+    return { added, skipped };
+  }
+
+  // ---------- Wire ----------
+  $('family').addEventListener('change', () => { updateWeightOptions(); updatePreview(); });
+  $('weight').addEventListener('change', updatePreview);
+  $('text').addEventListener('input', updatePreview);
+  $('fontSize').addEventListener('input', updatePreview);
+  $('lineHeight').addEventListener('input', updatePreview);
+  $('copyBtn').addEventListener('click', copySVG);
+  $('downloadBtn').addEventListener('click', downloadSVG);
+  $('prefetchAllBtn').addEventListener('click', prefetchAll);
+  $('resetFontsBtn').addEventListener('click', async () => {
+    if (!confirm('IndexedDBのフォントキャッシュを全削除しますか？')) return;
+    fontCache.clear();
+    await idbClear();
+    await refreshCacheStatus();
+    setStatus('キャッシュを削除しました', 'ok');
+    updatePreview();
+  });
+  $('fontFiles').addEventListener('change', async (e) => {
+    $('setupStatus').textContent = '登録中...';
+    const { added, skipped } = await handleFontFiles(e.target.files);
+    $('setupStatus').textContent = `${added} 個追加${skipped ? `（${skipped}件スキップ）` : ''}`;
+    await refreshCacheStatus();
+    updatePreview();
+  });
+
+  updateWeightOptions();
+  refreshCacheStatus();
+  updatePreview();
+})();
+</script>
+</body>
+</html>
